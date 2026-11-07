@@ -36,3 +36,4 @@ Giao diện Web Dashboard quản trị dữ liệu Quick Changeover (QCO) đư�
 Nhấp đúp chuột vào file:
 `C:\Users\LEAN15\Desktop\qco-dashboard\index.html`
 hoặc khởi chạy `serve.bat` để chạy qua local server.
+# lean-qco
