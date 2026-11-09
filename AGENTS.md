@@ -61,6 +61,14 @@ Web records use `lc` = LC days (col T) to match existing web scale. Rebuild via 
 - CSV import overrides the CSV's `COPT` column with `getCOPT({process})`; the CSV value is kept only as a fallback for unknown processes (`COPT_FALLBACK = 12.6`, overall median).
 - To change a target, edit `COPT_TARGETS` only. Do NOT edit per-row `copt` values in `data.js`/`qco_data.json` by hand.
 
+## Data coverage (synthetic gap-fill, demo only)
+
+Web tabs now cover 2025+2026 for every process. `OUTSOLE` (766 in 2025, 563 in 2026 after Dec-2026 fill) and `AUTOCUT` (780/652, hidden from tabs) have real data both years. The following are **synthetic mirrors** (copied year shifted by ±1 year, same COT/COPT/cost) created only to let every tab display 2025→2026 — **not real source data**:
+`ATOM 2025` (mirror of 2026), `SEMI 2025` (mirror of 2026), `HF 2025` (mirror of 2026, plus 1 real 2025 record), `PRINTING 2026` (mirror of 2025), `STITCHING 2026` (mirror of 2025).
+Raw sources `data/*.csv` still contain only the original years (ATOM/SEMI/GBOS only 2026, HF mostly 2026). Replace synthetic rows with real Excel/CSV imports when available.
+
+Months: every visible tab now has at least one record in all 12 months for both 2025 and 2026 (3,890 extra synthetic records cloned from the same process/year and shifted to the missing month, count = median monthly count). `AUTOCUT` (hidden) still lacks 2025-11/12 and 2026-06..12.
+
 ## Gotchas
 
 - Data lives in **three** places: `data.js`, `qco_data.json`, `data/*.csv`. If you change the dataset, update `data.js` (primary) and `qco_data.json` (fallback) together.
