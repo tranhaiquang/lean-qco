@@ -5,7 +5,7 @@
 
 let allRecords = [];
 let filteredRecords = [];
-let activeProcess = 'ALL';
+let activeProcess = 'ATOM';
 let pieMode = 'count';
 let currentLang = 'en'; // 'vi' or 'en'
 let currentPage = 1;
@@ -15,6 +15,38 @@ let currentSort = { column: 'date', order: 'desc' };
 let chartTrend = null;
 let chartType = null;
 let chartFocusModels = null;
+
+// COPT FIXED PER PROCESS / MACHINE — engineering standard, not taken from each row.
+// Values derived as the median COPT of the current dataset per process.
+// To change a target, edit this one table (keeps KPI / chart / table / export / import consistent).
+const COPT_TARGETS = {
+  ATOM: 12.2,
+  AUTOCUT: 12.2,
+  OUTSOLE: 37.0,
+  PRINTING: 12.55,
+  SEMI: 12.2,
+  STITCHING: 13.4,
+  HF: 22.0
+};
+const COPT_FALLBACK = 12.6; // overall median, for unknown processes
+
+function getCOPT(recordOrProcess) {
+  const proc = typeof recordOrProcess === 'string' ? recordOrProcess : recordOrProcess && recordOrProcess.process;
+  if (proc && Object.prototype.hasOwnProperty.call(COPT_TARGETS, proc)) {
+    return COPT_TARGETS[proc];
+  }
+  if (recordOrProcess && typeof recordOrProcess === 'object' && typeof recordOrProcess.copt === 'number' && recordOrProcess.copt > 0) {
+    return recordOrProcess.copt; // unknown process -> keep imported value
+  }
+  return COPT_FALLBACK;
+}
+
+function applyFixedCOPT(record) {
+  if (record && Object.prototype.hasOwnProperty.call(COPT_TARGETS, record.process)) {
+    record.copt = COPT_TARGETS[record.process];
+  }
+  return record;
+}
 
 // I18N DICTIONARY
 const i18n = {
@@ -31,7 +63,7 @@ const i18n = {
     unplannedOpt: 'Unplanned (Ngoài KH)',
     searchPlaceholder: 'Tìm kiếm model...',
     kpiCot: 'Thời gian C/O thực tế (COT)',
-    kpiCopt: 'Mục tiêu kỹ thuật (COPT)',
+    kpiCopt: 'Mục tiêu COPT cố định theo máy',
     unitMin: 'phút',
     vsTarget: 'so với chuẩn:',
     exceededBadge: 'Vượt',
@@ -44,7 +76,7 @@ const i18n = {
     trendTitle: 'Xu hướng hiệu suất theo tháng',
     trendSub: 'Thời gian thực tế (COT) vs Mục tiêu kỹ thuật (COPT)',
     legendCot: 'COT Thực tế',
-    legendCopt: 'COPT Mục tiêu',
+    legendCopt: 'COPT Mục tiêu cố định',
     typeSplitTitle: 'Cơ cấu loại C/O',
     btnCount: 'Số lần',
     btnCost: 'Chi phí',
@@ -88,7 +120,7 @@ const i18n = {
     unplannedOpt: 'Unplanned',
     searchPlaceholder: 'Search model...',
     kpiCot: 'Actual COT',
-    kpiCopt: 'Target COPT',
+    kpiCopt: 'Fixed COPT Target (per machine)',
     unitMin: 'min',
     vsTarget: 'vs target:',
     exceededBadge: 'Late',
@@ -101,7 +133,7 @@ const i18n = {
     trendTitle: 'Monthly Performance Trend',
     trendSub: 'Average Actual COT vs Standard Target COPT',
     legendCot: 'COT Actual',
-    legendCopt: 'COPT Target',
+    legendCopt: 'Fixed COPT Target',
     typeSplitTitle: 'Type Split',
     btnCount: 'Count',
     btnCost: 'Cost',
@@ -143,13 +175,13 @@ document.addEventListener('DOMContentLoaded', () => {
 // INITIALIZE DATA
 function loadData() {
   if (window.DEFAULT_QCO_DATA && Array.isArray(window.DEFAULT_QCO_DATA)) {
-    allRecords = window.DEFAULT_QCO_DATA;
+    allRecords = window.DEFAULT_QCO_DATA.map(applyFixedCOPT);
     onReady();
   } else {
     fetch('qco_data.json')
       .then(r => r.json())
       .then(d => {
-        allRecords = d;
+        allRecords = d.map(applyFixedCOPT);
         onReady();
       })
       .catch(console.error);
@@ -273,18 +305,14 @@ function updateLanguageUI() {
   document.getElementById('btnCancelModal').textContent = t.btnCancel;
 }
 
-// TABS: PROCESS SWITCHER (EXCLUDING AUTOCUT)
+// TABS: PROCESS SWITCHER (EXCLUDING AUTOCUT, NO "ALL" TAB)
 function renderTabs() {
   const t = i18n[currentLang];
-  const processes = ['ALL', ...new Set(allRecords.map(r => r.process).filter(Boolean))]
+  const processes = [...new Set(allRecords.map(r => r.process).filter(Boolean))]
     .filter(p => p.toUpperCase() !== 'AUTOCUT')
-    .sort((a,b) => {
-      if (a === 'ALL') return -1;
-      if (b === 'ALL') return 1;
-      return a.localeCompare(b);
-    });
+    .sort((a, b) => a.localeCompare(b));
 
-  if (activeProcess === 'AUTOCUT') activeProcess = 'ALL';
+  if (!processes.includes(activeProcess)) activeProcess = processes[0] || 'ATOM';
 
   const container = document.getElementById('processTabsContainer');
   container.innerHTML = '';
@@ -297,7 +325,7 @@ function renderTabs() {
         ? 'bg-zinc-800 text-white font-semibold' 
         : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60'
     }`;
-    btn.textContent = proc === 'ALL' ? t.allProcesses : proc;
+    btn.textContent = proc;
     btn.onclick = () => {
       activeProcess = proc;
       renderTabs();
@@ -315,7 +343,7 @@ function applyFilters() {
   const search = document.getElementById('filterSearch').value.trim().toLowerCase();
 
   filteredRecords = allRecords.filter(r => {
-    if (activeProcess !== 'ALL' && r.process !== activeProcess) return false;
+    if (activeProcess && r.process !== activeProcess) return false;
     if (year !== 'all' && (!r.date || !r.date.startsWith(year))) return false;
     if (month !== 'all') {
       if (!r.date || r.date.substring(5, 7) !== month) return false;
@@ -341,7 +369,9 @@ function resetFilters() {
   document.getElementById('filterMonth').value = 'all';
   document.getElementById('filterType').value = 'all';
   document.getElementById('filterSearch').value = '';
-  activeProcess = 'ALL';
+  // default to first tab alphabetically (ATOM) after removing "All Processes" tab
+  activeProcess = [...new Set(allRecords.map(r => r.process).filter(Boolean))]
+    .filter(p => p.toUpperCase() !== 'AUTOCUT').sort()[0] || 'ATOM';
   renderTabs();
   applyFilters();
 }
@@ -365,11 +395,12 @@ function updateKPIs() {
   let onTargetCount = 0;
 
   filteredRecords.forEach(r => {
+    const copt = getCOPT(r);
     sumCOT += (r.cot || 0);
-    sumCOPT += (r.copt || 0);
+    sumCOPT += copt;
     sumTotal += (r.total || 0);
     if (r.plan === 'Unplanned') sumUnplanned += (r.total || 0);
-    if (r.cot <= r.copt) onTargetCount++;
+    if ((r.cot || 0) <= copt) onTargetCount++;
   });
 
   const avgCOT = sumCOT / n;
@@ -441,7 +472,7 @@ function renderTrend() {
     const m = r.date.substring(0, 7);
     if (!monthly[m]) monthly[m] = { cotSum: 0, coptSum: 0, count: 0 };
     monthly[m].cotSum += (r.cot || 0);
-    monthly[m].coptSum += (r.copt || 0);
+    monthly[m].coptSum += getCOPT(r);
     monthly[m].count++;
   });
 
@@ -675,7 +706,8 @@ function renderTable() {
     tbody.innerHTML = `<tr><td colspan="10" class="py-4 text-center text-zinc-500 font-sans">${t.noRecords}</td></tr>`;
   } else {
     pageItems.forEach(r => {
-      const diff = (r.cot || 0) - (r.copt || 0);
+      const copt = getCOPT(r);
+      const diff = (r.cot || 0) - copt;
       const isExceeded = diff > 0;
       const typeDisplay = r.plan === 'Planned' 
         ? (currentLang === 'vi' ? 'Có KH' : 'Planned') 
@@ -689,7 +721,7 @@ function renderTable() {
         <td class="py-2 px-3 text-zinc-700 dark:text-zinc-300 font-sans font-medium">${r.model1}</td>
         <td class="py-2 px-3 text-zinc-900 dark:text-white font-sans font-medium">${r.model2}</td>
         <td class="py-2 px-3 text-right font-medium text-zinc-900 dark:text-white">${(r.cot||0).toFixed(1)}</td>
-        <td class="py-2 px-3 text-right text-zinc-400 dark:text-zinc-500">${(r.copt||0).toFixed(1)}</td>
+        <td class="py-2 px-3 text-right text-zinc-400 dark:text-zinc-500">${copt.toFixed(1)}</td>
         <td class="py-2 px-3 text-right ${isExceeded ? 'text-rose-500 font-medium' : 'text-emerald-500'}">
           ${isExceeded ? '+' : ''}${diff.toFixed(1)}
         </td>
@@ -755,7 +787,7 @@ function exportCurrentData() {
       `"${(r.model1||'').replace(/"/g, '""')}"`,
       `"${(r.model2||'').replace(/"/g, '""')}"`,
       r.cot,
-      r.copt,
+      getCOPT(r),
       r.total,
       r.plan,
       `"${(r.reason||'').replace(/"/g, '""')}"`
@@ -799,15 +831,17 @@ function handleFileSelect(e) {
         const m1 = (row['1st Model'] || row['model1'] || '').trim();
         const m2 = (row['2nd Model'] || row['model2'] || '').trim();
         if (!m1 && !m2) return;
+        const proc = (row['Process'] || file.name.split('.')[0]).toUpperCase();
 
         parsed.push({
           id: allRecords.length + i + 1,
           date: dateStr,
-          process: (row['Process'] || file.name.split('.')[0]).toUpperCase(),
+          process: proc,
           model1: m1,
           model2: m2,
           cot: parseFloat(row['COT'] || 0) || 0,
-          copt: parseFloat(row['COPT'] || 0) || 0,
+          // COPT is fixed per process; CSV value is only a fallback for unknown processes
+          copt: getCOPT({ process: proc, copt: parseFloat(row['COPT'] || 0) || 0 }),
           total: parseFloat(row['Total'] || 0) || 0,
           plan: (row['Plan_Unplan'] || 'Planned').includes('Unplan') ? 'Unplanned' : 'Planned',
           reason: (row['Reasons'] || '').trim()
