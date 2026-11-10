@@ -20,11 +20,12 @@ let chartFocusModels = null;
 // Values derived as the median COPT of the current dataset per process.
 // To change a target, edit this one table (keeps KPI / chart / table / export / import consistent).
 const COPT_TARGETS = {
-  ATOM: 12.2,
+  ATOM: 15.0,
   AUTOCUT: 12.2,
+  GBOS: 14.0,
   OUTSOLE: 37.0,
   PRINTING: 12.55,
-  SEMI: 12.2,
+  SEMI: 8.5,
   STITCHING: 13.4,
   HF: 22.0
 };
