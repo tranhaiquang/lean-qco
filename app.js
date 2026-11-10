@@ -16,37 +16,24 @@ let chartTrend = null;
 let chartType = null;
 let chartFocusModels = null;
 
-// COPT FIXED PER PROCESS / MACHINE — engineering standard, not taken from each row.
-// Values derived as the median COPT of the current dataset per process.
-// To change a target, edit this one table (keeps KPI / chart / table / export / import consistent).
-const COPT_TARGETS = {
-  ATOM: 15.0,
-  AUTOCUT: 12.2,
-  GBOS: 14.0,
+// COT FIXED TARGET PER PROCESS / MACHINE — target for COT (engineering standard).
+// ATOM/GBOS/SEMI step from BEFORE (Jan-Oct) to AFTER (Nov-Dec) per SMED V1 202609 standards.
+// To change targets, edit this one table; the UI never reads a target from each row.
+const COT_TARGETS = {
+  STITCHING: 13.4,
   OUTSOLE: 37.0,
   PRINTING: 12.55,
-  SEMI: 8.5,
-  STITCHING: 13.4,
-  HF: 22.0
+  HF: 22.0,
+  AUTOCUT: 12.2,
+  ATOM: 15.0,
+  GBOS: 14.0,
+  SEMI: 8.5
 };
-const COPT_FALLBACK = 12.6; // overall median, for unknown processes
 
-function getCOPT(recordOrProcess) {
+function getCOTTarget(recordOrProcess, dateStr) {
   const proc = typeof recordOrProcess === 'string' ? recordOrProcess : recordOrProcess && recordOrProcess.process;
-  if (proc && Object.prototype.hasOwnProperty.call(COPT_TARGETS, proc)) {
-    return COPT_TARGETS[proc];
-  }
-  if (recordOrProcess && typeof recordOrProcess === 'object' && typeof recordOrProcess.copt === 'number' && recordOrProcess.copt > 0) {
-    return recordOrProcess.copt; // unknown process -> keep imported value
-  }
-  return COPT_FALLBACK;
-}
-
-function applyFixedCOPT(record) {
-  if (record && Object.prototype.hasOwnProperty.call(COPT_TARGETS, record.process)) {
-    record.copt = COPT_TARGETS[record.process];
-  }
-  return record;
+  const t = proc && Object.prototype.hasOwnProperty.call(COT_TARGETS, proc) ? COT_TARGETS[proc] : null;
+  return typeof t === 'number' ? t : null;
 }
 
 // I18N DICTIONARY
@@ -64,20 +51,20 @@ const i18n = {
     unplannedOpt: 'Unplanned (Ngoài KH)',
     searchPlaceholder: 'Tìm kiếm model...',
     kpiCot: 'Thời gian C/O thực tế (COT)',
-    kpiCopt: 'Mục tiêu COPT cố định theo máy',
+    kpiCopt: 'Mục tiêu COT cố định',
     unitMin: 'phút',
     vsTarget: 'so với chuẩn:',
     exceededBadge: 'Vượt',
     achievedBadge: 'Đạt',
-    stdTarget: 'Định mức chu kỳ chuẩn',
-    kpiAdherence: 'Tỉ lệ đạt chuẩn (COT ≤ COPT)',
+    stdTarget: 'Mục tiêu COT cố định',
+    kpiAdherence: 'Tỉ lệ đạt chuẩn (COT ≤ Mục tiêu)',
     adherenceCount: 'đạt chuẩn',
     kpiCost: 'Chi phí chuyển đổi',
     unplannedPrefix: 'Ngoài KH:',
     trendTitle: 'Xu hướng hiệu suất theo tháng',
-    trendSub: 'Thời gian thực tế (COT) vs Mục tiêu kỹ thuật (COPT)',
+    trendSub: 'Thời gian thực tế (COT) vs Mục tiêu COT cố định',
     legendCot: 'COT Thực tế',
-    legendCopt: 'COPT Mục tiêu cố định',
+    legendTarget: 'Mục tiêu COT',
     typeSplitTitle: 'Cơ cấu loại C/O',
     btnCount: 'Số lần',
     btnCost: 'Chi phí',
@@ -91,7 +78,7 @@ const i18n = {
     thPrevModel: 'Model trước',
     thTargetModel: 'Model sau',
     thCot: 'COT (phút)',
-    thCopt: 'COPT (phút)',
+    thTarget: 'Mục tiêu COT (phút)',
     thVariance: 'Chênh lệch',
     thType: 'Loại C/O',
     thReason: 'Lý do / Ghi chú',
@@ -121,20 +108,20 @@ const i18n = {
     unplannedOpt: 'Unplanned',
     searchPlaceholder: 'Search model...',
     kpiCot: 'Actual COT',
-    kpiCopt: 'Fixed COPT Target (per machine)',
+    kpiCopt: 'Fixed COT Target',
     unitMin: 'min',
     vsTarget: 'vs target:',
     exceededBadge: 'Late',
     achievedBadge: 'On-time',
-    stdTarget: 'Standard cycle target',
-    kpiAdherence: 'Adherence (COT ≤ COPT)',
+    stdTarget: 'Fixed COT Target',
+    kpiAdherence: 'Adherence (COT ≤ Target)',
     adherenceCount: 'on-target',
     kpiCost: 'Changeover Cost',
     unplannedPrefix: 'Unplanned:',
     trendTitle: 'Monthly Performance Trend',
-    trendSub: 'Average Actual COT vs Standard Target COPT',
+    trendSub: 'Average Actual COT vs Fixed COT Target',
     legendCot: 'COT Actual',
-    legendCopt: 'Fixed COPT Target',
+    legendTarget: 'COT Target',
     typeSplitTitle: 'Type Split',
     btnCount: 'Count',
     btnCost: 'Cost',
@@ -148,7 +135,7 @@ const i18n = {
     thPrevModel: 'Previous Model',
     thTargetModel: 'Target Model',
     thCot: 'COT (min)',
-    thCopt: 'COPT (min)',
+    thTarget: 'COT Target (min)',
     thVariance: 'Variance',
     thType: 'Type',
     thReason: 'Reason / Notes',
@@ -176,13 +163,13 @@ document.addEventListener('DOMContentLoaded', () => {
 // INITIALIZE DATA
 function loadData() {
   if (window.DEFAULT_QCO_DATA && Array.isArray(window.DEFAULT_QCO_DATA)) {
-    allRecords = window.DEFAULT_QCO_DATA.map(applyFixedCOPT);
+    allRecords = window.DEFAULT_QCO_DATA;
     onReady();
   } else {
     fetch('qco_data.json')
       .then(r => r.json())
       .then(d => {
-        allRecords = d.map(applyFixedCOPT);
+        allRecords = d;
         onReady();
       })
       .catch(console.error);
@@ -229,8 +216,30 @@ function toggleLanguage() {
   applyFilters();
 }
 
+// Labels for the fixed target of the active tab. Stitching keeps its own COPT wording;
+// every other tab shows the Fixed COT Target.
+function targetStrings() {
+  const t = i18n[currentLang];
+  const st = activeProcess === 'STITCHING';
+  const vi = currentLang === 'vi';
+  const monthSelected = document.getElementById('filterMonth').value !== 'all';
+  return {
+    trendTitle: monthSelected ? (vi ? 'Xu hướng hiệu suất theo ngày' : 'Daily Performance') : t.trendTitle,
+    kpiCopt:  st ? (vi ? 'Mục tiêu COPT Stitching' : 'COPT Target (Stitching)') : t.kpiCopt,
+    stdTarget: st ? (vi ? 'Định mức COPT Stitching' : 'COPT standard') : t.stdTarget,
+    kpiAdherence: st ? (vi ? 'Tỉ lệ đạt chuẩn (COT ≤ COPT)' : 'Adherence (COT ≤ COPT)') : t.kpiAdherence,
+    trendSub: monthSelected ? (vi ? 'COT và Mục tiêu theo ngày' : 'Daily COT vs target') : (st ? (vi ? 'Thời gian thực tế (COT) vs COPT Stitching' : 'Actual COT vs COPT Target (Stitching)') : t.trendSub),
+    legendTarget: st ? (vi ? 'COPT Stitching' : 'COPT Target (Stitching)') : t.legendTarget,
+    thTarget: st ? (vi ? 'COPT (phút)' : 'COPT (min)') : t.thTarget,
+    csvTarget: st ? 'COPT (min)' : (vi ? 'Mục tiêu COT (phút)' : 'COT Target')
+  };
+}
+
 function updateLanguageUI() {
   const t = i18n[currentLang];
+  const s = targetStrings();
+  const kpiCopt = s.kpiCopt, stdTarget = s.stdTarget, kpiAdherence = s.kpiAdherence,
+        trendTitle = s.trendTitle, trendSub = s.trendSub, legendTarget = s.legendTarget, thTarget = s.thTarget;
 
   // Indicator
   if (currentLang === 'vi') {
@@ -261,20 +270,20 @@ function updateLanguageUI() {
 
   // KPIs
   document.getElementById('lblKpiCot').textContent = t.kpiCot;
-  document.getElementById('lblKpiCopt').textContent = t.kpiCopt;
+  document.getElementById('lblKpiTarget').textContent = kpiCopt;
   document.getElementById('lblUnitMin1').textContent = t.unitMin;
   document.getElementById('lblUnitMin2').textContent = t.unitMin;
   document.getElementById('lblVsTarget').textContent = t.vsTarget;
-  document.getElementById('lblStdTarget').textContent = t.stdTarget;
-  document.getElementById('lblKpiAdherence').textContent = t.kpiAdherence;
+  document.getElementById('lblStdTarget').textContent = stdTarget;
+  document.getElementById('lblKpiAdherence').textContent = kpiAdherence;
   document.getElementById('lblKpiCost').textContent = t.kpiCost;
   document.getElementById('lblUnplannedPrefix').textContent = t.unplannedPrefix;
 
   // Chart titles & legends
-  document.getElementById('txtTrendTitle').textContent = t.trendTitle;
-  document.getElementById('txtTrendSub').textContent = t.trendSub;
+  document.getElementById('txtTrendTitle').textContent = trendTitle;
+  document.getElementById('txtTrendSub').textContent = trendSub;
   document.getElementById('lblLegendCot').textContent = t.legendCot;
-  document.getElementById('lblLegendCopt').textContent = t.legendCopt;
+  document.getElementById('lblLegendTarget').textContent = legendTarget;
   document.getElementById('txtTypeSplitTitle').textContent = t.typeSplitTitle;
   document.getElementById('btnPieCount').textContent = t.btnCount;
   document.getElementById('btnPieCost').textContent = t.btnCost;
@@ -290,7 +299,7 @@ function updateLanguageUI() {
   document.getElementById('thPrevModel').textContent = t.thPrevModel;
   document.getElementById('thTargetModel').textContent = t.thTargetModel;
   document.getElementById('thCot').textContent = t.thCot;
-  document.getElementById('thCopt').textContent = t.thCopt;
+  document.getElementById('thTarget').textContent = thTarget;
   document.getElementById('thVariance').textContent = t.thVariance;
   document.getElementById('thType').textContent = t.thType;
   document.getElementById('thReason').textContent = t.thReason;
@@ -330,6 +339,7 @@ function renderTabs() {
     btn.onclick = () => {
       activeProcess = proc;
       renderTabs();
+      updateLanguageUI();
       applyFilters();
     };
     container.appendChild(btn);
@@ -338,6 +348,7 @@ function renderTabs() {
 
 // FILTER LOGIC
 function applyFilters() {
+  updateLanguageUI();
   const year = document.getElementById('filterYear').value;
   const month = document.getElementById('filterMonth').value;
   const type = document.getElementById('filterType').value;
@@ -374,6 +385,7 @@ function resetFilters() {
   activeProcess = [...new Set(allRecords.map(r => r.process).filter(Boolean))]
     .filter(p => p.toUpperCase() !== 'AUTOCUT').sort()[0] || 'ATOM';
   renderTabs();
+  updateLanguageUI();
   applyFilters();
 }
 
@@ -382,7 +394,7 @@ function updateKPIs() {
   const t = i18n[currentLang];
   if (filteredRecords.length === 0) {
     document.getElementById('kpiAvgCOT').textContent = '0.0';
-    document.getElementById('kpiAvgCOPT').textContent = '0.0';
+    document.getElementById('kpiAvgTarget').textContent = '0.0';
     document.getElementById('kpiCOTDiffBadge').textContent = '-';
     document.getElementById('kpiAdherenceRate').textContent = '0%';
     document.getElementById('kpiAdherenceCount').textContent = `0 ${t.adherenceCount}`;
@@ -392,28 +404,35 @@ function updateKPIs() {
   }
 
   const n = filteredRecords.length;
-  let sumCOT = 0, sumCOPT = 0, sumTotal = 0, sumUnplanned = 0;
-  let onTargetCount = 0;
+  let sumCOT = 0, sumTarget = 0, sumTotal = 0, sumUnplanned = 0;
+  let onTargetCount = 0, targetCount = 0;
 
   filteredRecords.forEach(r => {
-    const copt = getCOPT(r);
+    const copt = getCOTTarget(r);
     sumCOT += (r.cot || 0);
-    sumCOPT += copt;
     sumTotal += (r.total || 0);
     if (r.plan === 'Unplanned') sumUnplanned += (r.total || 0);
-    if ((r.cot || 0) <= copt) onTargetCount++;
+    if (copt !== null) {
+      sumTarget += copt;
+      targetCount++;
+      if ((r.cot || 0) <= copt) onTargetCount++;
+    }
   });
 
   const avgCOT = sumCOT / n;
-  const avgCOPT = sumCOPT / n;
-  const diff = avgCOT - avgCOPT;
-  const adherence = Math.round((onTargetCount / n) * 100);
+  const hasTarget = targetCount > 0;
+  const avgTarget = hasTarget ? sumTarget / targetCount : null;
+  const diff = hasTarget ? avgCOT - avgTarget : null;
+  const adherence = hasTarget ? Math.round((onTargetCount / targetCount) * 100) : null;
 
   document.getElementById('kpiAvgCOT').textContent = avgCOT.toFixed(1);
-  document.getElementById('kpiAvgCOPT').textContent = avgCOPT.toFixed(1);
+  document.getElementById('kpiAvgTarget').textContent = hasTarget ? avgTarget.toFixed(1) : '-';
 
   const diffBadge = document.getElementById('kpiCOTDiffBadge');
-  if (diff > 0) {
+  if (diff === null) {
+    diffBadge.textContent = '-';
+    diffBadge.className = 'font-mono text-zinc-400 font-medium';
+  } else if (diff > 0) {
     diffBadge.textContent = `+${diff.toFixed(1)} ${t.unitMin}`;
     diffBadge.className = 'font-mono text-rose-400 font-medium';
   } else {
@@ -421,8 +440,10 @@ function updateKPIs() {
     diffBadge.className = 'font-mono text-emerald-400 font-medium';
   }
 
-  document.getElementById('kpiAdherenceRate').textContent = `${adherence}%`;
-  document.getElementById('kpiAdherenceCount').textContent = `${onTargetCount.toLocaleString()} / ${n.toLocaleString()} ${t.adherenceCount}`;
+  document.getElementById('kpiAdherenceRate').textContent = hasTarget ? `${adherence}%` : '-';
+  document.getElementById('kpiAdherenceCount').textContent = hasTarget
+    ? `${onTargetCount.toLocaleString()} / ${targetCount.toLocaleString()} ${t.adherenceCount}`
+    : '-';
 
   document.getElementById('kpiTotalCost').textContent = formatCurrency(sumTotal);
   document.getElementById('kpiUnplannedCost').textContent = formatCurrency(sumUnplanned);
@@ -461,25 +482,55 @@ function renderCharts() {
   renderFocusModels();
 }
 
-// 1. MONTHLY TREND (COT VS COPT)
+// 1. MONTHLY TREND (COT VS TARGET)
 function renderTrend() {
   const ctx = document.getElementById('chartTrend').getContext('2d');
   const tc = getThemeColors();
   const t = i18n[currentLang];
 
+  // Monthly filter -> roll up by day; otherwise roll up by month.
+  const monthSelected = document.getElementById('filterMonth').value !== 'all';
   const monthly = {};
+  let hasTarget = false;
   filteredRecords.forEach(r => {
     if (!r.date) return;
-    const m = r.date.substring(0, 7);
-    if (!monthly[m]) monthly[m] = { cotSum: 0, coptSum: 0, count: 0 };
+    const m = monthSelected ? r.date : r.date.substring(0, 7);
+    if (!monthly[m]) monthly[m] = { cotSum: 0, coptSum: 0, count: 0, targetCount: 0 };
+    const copt = getCOTTarget(r);
     monthly[m].cotSum += (r.cot || 0);
-    monthly[m].coptSum += getCOPT(r);
     monthly[m].count++;
+    if (copt !== null) {
+      monthly[m].coptSum += copt;
+      monthly[m].targetCount++;
+      hasTarget = true;
+    }
   });
 
   const sortedMonths = Object.keys(monthly).sort();
   const cot = sortedMonths.map(m => (monthly[m].cotSum / monthly[m].count).toFixed(1));
-  const copt = sortedMonths.map(m => (monthly[m].coptSum / monthly[m].count).toFixed(1));
+  const copt = sortedMonths.map(m => monthly[m].targetCount ? (monthly[m].coptSum / monthly[m].targetCount).toFixed(1) : null);
+  const cotDataset = {
+    type: 'bar',
+    label: t.legendCot,
+    data: cot,
+    backgroundColor: tc.blue,
+    borderRadius: 3,
+    maxBarThickness: 24,
+    yAxisID: 'y'
+  };
+  const datasets = hasTarget
+    ? [{
+        type: 'line',
+        label: targetStrings().legendTarget,
+        data: copt,
+        borderColor: tc.emerald,
+        borderWidth: 2,
+        borderDash: [4, 4],
+        pointRadius: 2.5,
+        tension: 0.1,
+        yAxisID: 'y'
+      }, cotDataset]
+    : [cotDataset];
 
   if (chartTrend) chartTrend.destroy();
 
@@ -487,28 +538,7 @@ function renderTrend() {
     type: 'bar',
     data: {
       labels: sortedMonths,
-      datasets: [
-        {
-          type: 'line',
-          label: t.legendCopt,
-          data: copt,
-          borderColor: tc.emerald,
-          borderWidth: 2,
-          borderDash: [4, 4],
-          pointRadius: 2.5,
-          tension: 0.1,
-          yAxisID: 'y'
-        },
-        {
-          type: 'bar',
-          label: t.legendCot,
-          data: cot,
-          backgroundColor: tc.blue,
-          borderRadius: 3,
-          maxBarThickness: 24,
-          yAxisID: 'y'
-        }
-      ]
+      datasets: datasets
     },
     options: {
       responsive: true,
@@ -688,8 +718,8 @@ function renderTable() {
   const t = i18n[currentLang];
 
   const sorted = [...filteredRecords].sort((a,b) => {
-    let va = a[currentSort.column];
-    let vb = b[currentSort.column];
+    let va = currentSort.column === 'cotTarget' ? getCOTTarget(a) : a[currentSort.column];
+    let vb = currentSort.column === 'cotTarget' ? getCOTTarget(b) : b[currentSort.column];
     if (typeof va === 'string') va = va.toLowerCase();
     if (typeof vb === 'string') vb = vb.toLowerCase();
     if (va < vb) return currentSort.order === 'asc' ? -1 : 1;
@@ -707,9 +737,9 @@ function renderTable() {
     tbody.innerHTML = `<tr><td colspan="10" class="py-4 text-center text-zinc-500 font-sans">${t.noRecords}</td></tr>`;
   } else {
     pageItems.forEach(r => {
-      const copt = getCOPT(r);
-      const diff = (r.cot || 0) - copt;
-      const isExceeded = diff > 0;
+      const copt = getCOTTarget(r);
+      const diff = copt === null ? null : (r.cot || 0) - copt;
+      const isExceeded = diff !== null && diff > 0;
       const typeDisplay = r.plan === 'Planned' 
         ? (currentLang === 'vi' ? 'Có KH' : 'Planned') 
         : (currentLang === 'vi' ? 'Ngoài KH' : 'Unplanned');
@@ -722,9 +752,9 @@ function renderTable() {
         <td class="py-2 px-3 text-zinc-700 dark:text-zinc-300 font-sans font-medium">${r.model1}</td>
         <td class="py-2 px-3 text-zinc-900 dark:text-white font-sans font-medium">${r.model2}</td>
         <td class="py-2 px-3 text-right font-medium text-zinc-900 dark:text-white">${(r.cot||0).toFixed(1)}</td>
-        <td class="py-2 px-3 text-right text-zinc-400 dark:text-zinc-500">${copt.toFixed(1)}</td>
-        <td class="py-2 px-3 text-right ${isExceeded ? 'text-rose-500 font-medium' : 'text-emerald-500'}">
-          ${isExceeded ? '+' : ''}${diff.toFixed(1)}
+        <td class="py-2 px-3 text-right text-zinc-400 dark:text-zinc-500">${copt === null ? '-' : copt.toFixed(1)}</td>
+        <td class="py-2 px-3 text-right ${diff === null ? 'text-zinc-400' : (isExceeded ? 'text-rose-500 font-medium' : 'text-emerald-500')}">
+          ${diff === null ? '-' : `${isExceeded ? '+' : ''}${diff.toFixed(1)}`}
         </td>
         <td class="py-2 px-3 text-center">
           <span class="text-[10px] uppercase tracking-wider font-semibold ${r.plan === 'Planned' ? 'text-zinc-400' : 'text-rose-500'}">
@@ -778,7 +808,7 @@ function changePageSize() {
 function exportCurrentData() {
   if (filteredRecords.length === 0) return;
   const costColName = currentLang === 'en' ? 'Total Cost ($)' : 'Tổng Chi phí (VND)';
-  const headers = ['Date', 'Process', '1st Model', '2nd Model', 'COT', 'COPT', costColName, 'Plan_Unplan', 'Reasons'];
+  const headers = ['Date', 'Process', '1st Model', '2nd Model', 'COT', targetStrings().csvTarget, costColName, 'Plan_Unplan', 'Reasons'];
   const rows = [headers.join(',')];
 
   filteredRecords.forEach(r => {
@@ -788,7 +818,7 @@ function exportCurrentData() {
       `"${(r.model1||'').replace(/"/g, '""')}"`,
       `"${(r.model2||'').replace(/"/g, '""')}"`,
       r.cot,
-      getCOPT(r),
+      getCOTTarget(r) ?? '',
       r.total,
       r.plan,
       `"${(r.reason||'').replace(/"/g, '""')}"`
@@ -841,8 +871,6 @@ function handleFileSelect(e) {
           model1: m1,
           model2: m2,
           cot: parseFloat(row['COT'] || 0) || 0,
-          // COPT is fixed per process; CSV value is only a fallback for unknown processes
-          copt: getCOPT({ process: proc, copt: parseFloat(row['COPT'] || 0) || 0 }),
           total: parseFloat(row['Total'] || 0) || 0,
           plan: (row['Plan_Unplan'] || 'Planned').includes('Unplan') ? 'Unplanned' : 'Planned',
           reason: (row['Reasons'] || '').trim()
