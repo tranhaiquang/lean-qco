@@ -49,7 +49,8 @@ No build/test/lint scripts exist. Verify changes manually in the browser (charts
 Tabs are rendered from the distinct `process` values found in data (excluding `AUTOCUT`), alphabetical. There is **no "All Processes" tab**; `activeProcess` defaults to the first alphabetical tab (ATOM). If a tab has no records at all it simply doesn't render. Reset button restores the default state (first tab alphabetically).
 
 Current tabs: `ATOM`, `GBOS`, `HF`, `OUTSOLE`, `PRINTING`, `SEMI`, `STITCHING`.
-Year filter options: `2025`, `2026` (default view = all = 2025+2026). No `2024` records remain.
+Year filter options: `2025`, `2026` (no "all years" option; default view shows 2026). 2024 records were removed.
+Month filter is a from → to range (e.g. Tháng 3 → Tháng 8) instead of a single-month dropdown.
 
 ## Fixed COT Target (current rule)
 

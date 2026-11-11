@@ -108,27 +108,42 @@
       <div class="flex flex-wrap items-center gap-2 text-xs">
         <!-- Year -->
         <select id="filterYear" onchange="applyFilters()" class="bg-zinc-50 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-800 rounded-md px-2.5 py-1 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:border-zinc-500 transition">
-          <option value="all">Tất cả năm (≥2025)</option>
           <option value="2026">2026</option>
           <option value="2025">2025</option>
         </select>
 
-        <!-- Month -->
-        <select id="filterMonth" onchange="applyFilters()" class="bg-zinc-50 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-800 rounded-md px-2.5 py-1 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:border-zinc-500 transition">
-          <option value="all">Tất cả tháng</option>
-          <option value="01">Tháng 1</option>
-          <option value="02">Tháng 2</option>
-          <option value="03">Tháng 3</option>
-          <option value="04">Tháng 4</option>
-          <option value="05">Tháng 5</option>
-          <option value="06">Tháng 6</option>
-          <option value="07">Tháng 7</option>
-          <option value="08">Tháng 8</option>
-          <option value="09">Tháng 9</option>
-          <option value="10">Tháng 10</option>
-          <option value="11">Tháng 11</option>
-          <option value="12">Tháng 12</option>
-        </select>
+        <!-- Month from-to -->
+        <div class="flex items-center gap-1 text-xs">
+          <select id="filterMonthFrom" onchange="applyFilters()" class="bg-zinc-50 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-800 rounded-md px-2.5 py-1 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:border-zinc-500 transition">
+            <option value="01">Tháng 1</option>
+            <option value="02">Tháng 2</option>
+            <option value="03">Tháng 3</option>
+            <option value="04">Tháng 4</option>
+            <option value="05">Tháng 5</option>
+            <option value="06">Tháng 6</option>
+            <option value="07">Tháng 7</option>
+            <option value="08">Tháng 8</option>
+            <option value="09">Tháng 9</option>
+            <option value="10">Tháng 10</option>
+            <option value="11">Tháng 11</option>
+            <option value="12">Tháng 12</option>
+          </select>
+          <span class="text-zinc-400 dark:text-zinc-500 px-1">→</span>
+          <select id="filterMonthTo" onchange="applyFilters()" class="bg-zinc-50 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-800 rounded-md px-2.5 py-1 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:border-zinc-500 transition">
+            <option value="01">Tháng 1</option>
+            <option value="02">Tháng 2</option>
+            <option value="03">Tháng 3</option>
+            <option value="04">Tháng 4</option>
+            <option value="05">Tháng 5</option>
+            <option value="06">Tháng 6</option>
+            <option value="07">Tháng 7</option>
+            <option value="08">Tháng 8</option>
+            <option value="09">Tháng 9</option>
+            <option value="10">Tháng 10</option>
+            <option value="11">Tháng 11</option>
+            <option value="12" selected>Tháng 12</option>
+          </select>
+        </div>
 
         <!-- Type -->
         <select id="filterType" onchange="applyFilters()" class="bg-zinc-50 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-800 rounded-md px-2.5 py-1 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:border-zinc-500 transition">

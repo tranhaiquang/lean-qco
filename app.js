@@ -44,8 +44,7 @@ const i18n = {
     uploadCsv: 'Tải CSV',
     export: 'Xuất file',
     allProcesses: 'Tất cả xưởng',
-    allYears: 'Tất cả năm',
-    allMonths: 'Tất cả tháng',
+
     allTypes: 'Tất cả loại C/O',
     plannedOpt: 'Planned (Có KH)',
     unplannedOpt: 'Unplanned (Ngoài KH)',
@@ -101,8 +100,7 @@ const i18n = {
     uploadCsv: 'Upload CSV',
     export: 'Export',
     allProcesses: 'All Processes',
-    allYears: 'All years',
-    allMonths: 'All months',
+
     allTypes: 'Planned & Unplanned',
     plannedOpt: 'Planned',
     unplannedOpt: 'Unplanned',
@@ -222,7 +220,9 @@ function targetStrings() {
   const t = i18n[currentLang];
   const st = activeProcess === 'STITCHING';
   const vi = currentLang === 'vi';
-  const monthSelected = document.getElementById('filterMonth').value !== 'all';
+  const fromEl = document.getElementById('filterMonthFrom');
+  const toEl = document.getElementById('filterMonthTo');
+  const monthSelected = fromEl && toEl && (fromEl.value !== '01' || toEl.value !== '12');
   return {
     trendTitle: monthSelected ? (vi ? 'Xu hướng hiệu suất theo ngày' : 'Daily Performance') : t.trendTitle,
     kpiCopt:  st ? (vi ? 'Mục tiêu COPT Stitching' : 'COPT Target (Stitching)') : t.kpiCopt,
@@ -257,11 +257,12 @@ function updateLanguageUI() {
   document.getElementById('btnExport').textContent = t.export;
 
   // Filter options
-  document.getElementById('filterYear').options[0].text = t.allYears;
-  document.getElementById('filterMonth').options[0].text = t.allMonths;
-  for (let m = 1; m <= 12; m++) {
-    const opt = document.getElementById('filterMonth').options[m];
-    opt.text = currentLang === 'vi' ? `Tháng ${m}` : `Month ${m}`;
+  for (const id of ['filterMonthFrom', 'filterMonthTo']) {
+    const sel = document.getElementById(id);
+    for (const opt of sel.options) {
+      const m = parseInt(opt.value, 10);
+      opt.text = currentLang === 'vi' ? `Tháng ${m}` : `Month ${m}`;
+    }
   }
   document.getElementById('filterType').options[0].text = t.allTypes;
   document.getElementById('filterType').options[1].text = t.plannedOpt;
@@ -350,16 +351,20 @@ function renderTabs() {
 function applyFilters() {
   updateLanguageUI();
   const year = document.getElementById('filterYear').value;
-  const month = document.getElementById('filterMonth').value;
+  const fromMonth = document.getElementById('filterMonthFrom').value;
+  const toMonth = document.getElementById('filterMonthTo').value;
+  const from = fromMonth <= toMonth ? fromMonth : toMonth;
+  const to = fromMonth <= toMonth ? toMonth : fromMonth;
   const type = document.getElementById('filterType').value;
   const search = document.getElementById('filterSearch').value.trim().toLowerCase();
 
   filteredRecords = allRecords.filter(r => {
     if (activeProcess && r.process !== activeProcess) return false;
     if (year !== 'all' && (!r.date || !r.date.startsWith(year))) return false;
-    if (month !== 'all') {
-      if (!r.date || r.date.substring(5, 7) !== month) return false;
-    }
+    const mm = r.date ? r.date.substring(5, 7) : '';
+    if (mm) {
+      if (mm < from || mm > to) return false;
+    } else return false;
     if (type !== 'all' && r.plan.toLowerCase() !== type.toLowerCase()) return false;
     if (search) {
       const match = (r.model1||'').toLowerCase().includes(search) ||
@@ -377,8 +382,9 @@ function applyFilters() {
 }
 
 function resetFilters() {
-  document.getElementById('filterYear').value = 'all';
-  document.getElementById('filterMonth').value = 'all';
+  document.getElementById('filterYear').value = '2026';
+  document.getElementById('filterMonthFrom').value = '01';
+  document.getElementById('filterMonthTo').value = '12';
   document.getElementById('filterType').value = 'all';
   document.getElementById('filterSearch').value = '';
   // default to first tab alphabetically (ATOM) after removing "All Processes" tab
@@ -489,7 +495,9 @@ function renderTrend() {
   const t = i18n[currentLang];
 
   // Monthly filter -> roll up by day; otherwise roll up by month.
-  const monthSelected = document.getElementById('filterMonth').value !== 'all';
+  const fromEl = document.getElementById('filterMonthFrom');
+  const toEl = document.getElementById('filterMonthTo');
+  const monthSelected = fromEl && toEl && (fromEl.value !== '01' || toEl.value !== '12');
   const monthly = {};
   let hasTarget = false;
   filteredRecords.forEach(r => {
